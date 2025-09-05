@@ -1,13 +1,3 @@
-<!-- const firebaseConfig = {
-        apiKey: "AIzaSyA6pSKnDKLiLyjswp7H_bq8HtCUVMkDXq0",
-        authDomain: "room-state-cloud.firebaseapp.com",
-        projectId: "room-state-cloud",
-        storageBucket: "room-state-cloud.firebasestorage.app",
-        messagingSenderId: "105575025704",
-        appId: "1:105575025704:web:b02832c6f4bb991503b91d",
-        measurementId: "G-KVMW02JT3R",
-      }; -->
-
 <!DOCTYPE html>
 <html>
   <head>
@@ -66,13 +56,13 @@
       } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
       const firebaseConfig = {
-        apiKey: "AIzaSyA6pSKnDKLiLyjswp7H_bq8HtCUVMkDXq0",
-        authDomain: "room-state-cloud.firebaseapp.com",
-        projectId: "room-state-cloud",
-        storageBucket: "room-state-cloud.firebasestorage.app",
-        messagingSenderId: "105575025704",
-        appId: "1:105575025704:web:b02832c6f4bb991503b91d",
-        measurementId: "G-KVMW02JT3R",
+        apiKey: "hidden",
+        authDomain: "hidden",
+        projectId: "hidden",
+        storageBucket: "hidden",
+        messagingSenderId: "hidden",
+        appId: "hidden",
+        measurementId: "hidden",
       };
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
@@ -124,7 +114,6 @@
       const BLINDS_COLOR = "rgba(255,152,0,1)"; // orange
       const DAYS = 7; // show last N days
 
-      // Map event → binary state; prefer confirmed_state → requested_state → action
       function toState(e, prev) {
         const s = (e.confirmed_state || e.requested_state || "").toLowerCase();
         if (s === "on" || s === "open") return 1;
@@ -154,7 +143,7 @@
       const blindsChart = makeChart("c_blinds", { 0: "Closed", 1: "Open" });
 
       const today = sod(new Date());
-      const earliest = new Date(today.getTime() - (DAYS + 1) * 86400000); // N+1 days for seeding
+      const earliest = new Date(today.getTime() - (DAYS + 1) * 86400000);
 
       const q = query(
         collection(db, "events"),

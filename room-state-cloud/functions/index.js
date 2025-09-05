@@ -17,7 +17,6 @@ const db = admin.firestore();
 
 const INGEST_API_KEY = defineSecret("INGEST_API_KEY");
 
-// If you moved to us-west2, keep region here; otherwise use us-central1.
 exports.ingestEvent = onRequest(
   { region: "us-west2", secrets: [INGEST_API_KEY] },
   async (req, res) => {
@@ -29,13 +28,13 @@ exports.ingestEvent = onRequest(
       if (!apiKey || key !== apiKey) return res.status(401).send("Unauthorized");
 
       const {
-        device,            // "blinds" | "desk_led"
-        action,            // "TOGGLE" | "OPEN" | "CLOSE" | "ON" | "OFF" | ...
-        requested_state,   // optional: "open"/"closed" or "on"/"off"
-        confirmed_state,   // optional: "open"/"closed" or "on"/"off"
-        tx_id,             // required: idempotency key
-        client_ts,         // optional: millis
-        source             // optional: "main-ttgo" | "blinds-node" | "led-node"
+        device,  
+        action,       
+        requested_state,
+        confirmed_state,  
+        tx_id,   
+        client_ts,  
+        source 
       } = req.body || {};
 
       if (!device || !action || !tx_id) {

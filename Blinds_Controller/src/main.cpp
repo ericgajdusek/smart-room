@@ -2,24 +2,23 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
-// ---- Pins ----
+// Pins 
 static const int PIN_EN   = 25;  // enable
 static const int PIN_STEP = 22;  // step
 static const int PIN_DIR  = 21;  // dir
 
-// Most drivers use EN active-LOW. Set false if yours is active-HIGH.
 static const bool EN_ACTIVE_LOW = true;
 
-// ---- Command payload ----
+// esp-now Command payload
 struct __attribute__((packed)) Command {
-  int32_t  steps;        // +/- step count; sign used if dir==0
-  uint16_t us_per_step;  // microseconds per step period
-  int8_t   dir;          // 1=CW, -1=CCW, 0=use sign of steps
-  uint8_t  enable;       // 1=enable driver, 0=disable
+  int32_t  steps;  
+  uint16_t us_per_step; 
+  int8_t   dir;    
+  uint8_t  enable;
 };
 
 volatile bool have_cmd = false;
-Command latest; // not volatile; we copy it inside a critical section
+Command latest;
 
 inline void enableDriver(bool on) {
   digitalWrite(PIN_EN, EN_ACTIVE_LOW ? (on ? LOW : HIGH) : (on ? HIGH : LOW));
@@ -34,8 +33,8 @@ void moveStepsBlocking(int32_t steps, uint16_t us_per_step, int8_t dir_hint) {
   uint32_t n = steps >= 0 ? steps : -steps;
 
   // conservative limits
-  if (us_per_step < 200)   us_per_step = 200;    // ~2.5 kHz
-  if (us_per_step > 50000) us_per_step = 50000;  // 20 Hz
+  if (us_per_step < 200)   us_per_step = 200; 
+  if (us_per_step > 50000) us_per_step = 50000; 
   uint16_t half = us_per_step / 2;
 
   for (uint32_t i = 0; i < n; ++i) {
@@ -46,7 +45,7 @@ void moveStepsBlocking(int32_t steps, uint16_t us_per_step, int8_t dir_hint) {
   }
 }
 
-// ---- Legacy ESP-NOW callback (works on all cores) ----
+
 void onRecv(const uint8_t* mac, const uint8_t* data, int len) {
   if (len < (int)sizeof(Command)) return;
   noInterrupts();
@@ -90,7 +89,7 @@ void loop() {
     if (c.enable) {
       moveStepsBlocking(c.steps, c.us_per_step, c.dir);
       Serial.println("Move complete.");
-      enableDriver(false); // optionally auto-disable after move
+      enableDriver(false);
     }
   }
   delay(1);

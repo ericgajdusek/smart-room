@@ -2,29 +2,27 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
-// ---------------- Pins ----------------
-#define LIGHT_BUTTON     35   // needs external pull-up! (or change to 27)
+// Pins 
+#define LIGHT_BUTTON     35   
 #define LIGHT_UP_BUTTON  32
 #define LIGHT_DOWN_BUTTON 33
-#define GATE_PIN         22   // PWM to MOSFET gate (inverted output)
+#define GATE_PIN         22   
 
-// -------------- PWM setup -------------
 const int pwmChannel   = 0;
-const int pwmFreq      = 5000;  // 5 kHz
-const int pwmResolution= 8;     // 0..255
+const int pwmFreq      = 5000;  
+const int pwmResolution= 8;  
 
-// -------------- State -----------------
-bool toggleState = true;     // ON/OFF
-int  brightness  = 255;      // 0..255
-const int STEP   = 25;       // local +/- step
+// State 
+bool toggleState = true;    
+int  brightness  = 255;    
+const int STEP   = 25; 
 const uint32_t DEBOUNCE_MS = 30;
 
-// -------------- Helpers ---------------
+// helpers 
 static inline void applyBrightness(int level) {
   level = constrain(level, 0, 255);
   brightness  = level;
   toggleState = (level > 0);
-  // Low-side with inverted duty (0=off, 255=full)
   ledcWrite(pwmChannel, 255 - level);
 }
 
@@ -40,7 +38,6 @@ static inline bool fallingEdge(uint8_t pin) {
   uint32_t now = millis();
   if (raw != b->last) { b->last = raw; b->t = now; }
   if ((now - b->t) >= DEBOUNCE_MS && raw == LOW) {
-    // wait until released before reporting another edge
     while (digitalRead(pin) == LOW) delay(1);
     delay(10);
     return true;
@@ -48,11 +45,10 @@ static inline bool fallingEdge(uint8_t pin) {
   return false;
 }
 
-// --------- ESP-NOW command payload ----
-// Keep this tiny; matches what the TTGO will send.
+// esp-now command payload 
 struct __attribute__((packed)) LightCmd {
-  uint8_t action;   // 1=ON, 2=OFF, 3=TOGGLE, 4=SET_BRIGHTNESS
-  uint8_t value;    // used only for action 4 (0..255)
+  uint8_t action; 
+  uint8_t value;
 };
 
 volatile bool have_cmd = false;
@@ -68,16 +64,16 @@ void onRecv(const uint8_t* mac, const uint8_t* data, int len) {
 
 static inline void handleCmd(const LightCmd& c) {
   switch (c.action) {
-    case 1: // ON
+    case 1: 
       applyBrightness(brightness == 0 ? 255 : brightness);
       break;
-    case 2: // OFF
+    case 2: 
       applyBrightness(0);
       break;
-    case 3: // TOGGLE
+    case 3:
       applyBrightness(toggleState ? 0 : (brightness == 0 ? 255 : brightness));
       break;
-    case 4: // SET_BRIGHTNESS
+    case 4:
       applyBrightness(c.value);
       break;
     default:
@@ -92,8 +88,8 @@ void setup() {
   // Buttons
   pinMode(LIGHT_UP_BUTTON,   INPUT_PULLUP);
   pinMode(LIGHT_DOWN_BUTTON, INPUT_PULLUP);
-  // LIGHT_BUTTON (GPIO35) has no internal pull-ups:
-  pinMode(LIGHT_BUTTON,      INPUT);  // expect external pull-up if using 35
+
+  pinMode(LIGHT_BUTTON,      INPUT); 
 
   // PWM
   ledcSetup(pwmChannel, pwmFreq, pwmResolution);
@@ -135,7 +131,7 @@ void loop() {
       applyBrightness(brightness - STEP);
       if (brightness == 0) toggleState = false;
     } else {
-      // If currently OFF, a "down" press can leave it OFF; no change
+
     }
   }
 

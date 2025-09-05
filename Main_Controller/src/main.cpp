@@ -7,20 +7,17 @@
 
 static uint8_t ESPNOW_PRIMARY_CH = 1;
 
-// ======= WIFI + CLOUD CONFIG =======
-static const char* WIFI_SSID = "Velocity Wi-Fi";
-static const char* WIFI_PASS = "stolypxc";
 
-// Your deployed HTTPS Cloud Function URL (region us-central1 for free tier)
-static const char* INGEST_URL = "https://us-west2-room-state-cloud.cloudfunctions.net/ingestEvent";
+static const char* WIFI_SSID = "hidden";
+static const char* WIFI_PASS = "hidden";
 
-// Same value you set with: firebase functions:secrets:set INGEST_API_KEY
-static const char* API_KEY = "my-esp32-key";
+static const char* INGEST_URL = "hidden";
 
-// (Optional) Give this device a short name for 'source'
+static const char* API_KEY = "hidden";
+
 static const char* SOURCE_ID = "main-ttgo";
 
-// Wi-Fi connect helper (call once; ESP-NOW still works in STA)
+// Wi-Fi connect helper 
 void connectWiFiOnce() {
   static bool done = false;
   if (done) return;
@@ -36,14 +33,14 @@ String makeTxId(const char* prefix) { return String(prefix) + "-" + String((uint
 bool postEvent(const char* device, const char* action,
                const char* requested_state, const char* confirmed_state,
                const char* tx_id, const char* source, uint64_t client_ts_ms) {
-  // CONNECT (temporary association for the POST)
+  // CONNECT 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   unsigned long t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) delay(200);
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[postEvent] WiFi connect failed");
-    // Restore ESP-NOW channel and bail
+    
     WiFi.disconnect();
     WiFi.mode(WIFI_STA);
     esp_wifi_set_channel(ESPNOW_PRIMARY_CH, WIFI_SECOND_CHAN_NONE);
@@ -51,7 +48,7 @@ bool postEvent(const char* device, const char* action,
   }
 
   WiFiClientSecure client;
-  client.setInsecure();  // MVP: skip cert validation (works with Google HTTPS)
+  client.setInsecure();
 
   HTTPClient http;
   if (!http.begin(client, INGEST_URL)) {
@@ -78,10 +75,10 @@ bool postEvent(const char* device, const char* action,
   String body;  serializeJson(doc, body);
 
   int code = http.POST(body);
-  String resp = http.getString();   // read body (even on errors) for debug
+  String resp = http.getString();   
   http.end();
 
-  // TEARDOWN: back to ESP-NOW
+  // back to ESP-NOW
   WiFi.disconnect();
   WiFi.mode(WIFI_STA);
   esp_wifi_set_channel(ESPNOW_PRIMARY_CH, WIFI_SECOND_CHAN_NONE);
@@ -91,15 +88,15 @@ bool postEvent(const char* device, const char* action,
 }
 
 
-// ===== Pins =====
-#define BLINDS_BTN_PIN    21     // to GND, uses internal pull-up
-#define DESK_LED_BTN_PIN  22     // to GND, uses internal pull-up
+// Pins 
+#define BLINDS_BTN_PIN 21   
+#define DESK_LED_BTN_PIN 22    
 #define LDR_PIN 32
 #define NIGHT_BTN_PIN 13
 
 static const uint32_t DEBOUNCE_MS = 30;
 
-// ===== Peers (MACs) =====
+// macs
 uint8_t motorPeerMac[6] = { 0x14, 0x33, 0x5C, 0x02, 0xAD, 0x70 }; // blinds motor node
 uint8_t lightPeerMac[6] = { 0x6C, 0xC8, 0x40, 0x89, 0x73, 0xE8 }; // LED strip node
 
@@ -109,27 +106,27 @@ static bool blindsAssumedOpen = true;
 
 // Photoresistor stuff
 bool nightmode = false;
-static uint16_t LDR_ON_THR  = 1000;  // turn LEDs ON when ADC reading goes below this (darker)
-static uint16_t LDR_OFF_THR = 1500;  // turn LEDs OFF when above this (brighter)
+static uint16_t LDR_ON_THR  = 1000; 
+static uint16_t LDR_OFF_THR = 1500; 
 int lightVal;
 
-// ===== Motor movement params =====
+// Motor movement params
 static const int32_t  STEPS_PER_TAP = 1200;
-static const uint16_t US_PER_STEP   = 800;   // lower = faster
+static const uint16_t US_PER_STEP   = 800;  
 
-// ===== Payloads =====
+// commands
 struct __attribute__((packed)) Command {
-  int32_t  steps;        // +/- step count; sign used if dir==0
-  uint16_t us_per_step;  // microseconds per step period
-  int8_t   dir;          // 1=CW, -1=CCW, 0=use sign of steps
-  uint8_t  enable;       // 1=enable driver, 0=disable
+  int32_t  steps; 
+  uint16_t us_per_step; 
+  int8_t   dir;     
+  uint8_t  enable;     
 };
 struct __attribute__((packed)) LightCmd {
-  uint8_t action;        // 1=ON, 2=OFF, 3=TOGGLE, 4=SET_BRIGHTNESS
-  uint8_t value;         // used only for action 4 (0..255)
+  uint8_t action;  
+  uint8_t value;  
 };
 
-// ===== Utils =====
+// utils
 static String macToStr(const uint8_t mac[6]) {
   char b[18];
   snprintf(b, sizeof(b), "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -156,10 +153,9 @@ void sendMove(int32_t steps, uint16_t us_per_step, int8_t dir = 0, bool enable =
   blindsAssumedOpen = next;
 }
 void sendLightToggle() {
-  LightCmd c{3, 0};  // TOGGLE
+  LightCmd c{3, 0}; 
   esp_err_t err = esp_now_send(lightPeerMac, (uint8_t*)&c, sizeof(c));
 
-  // what we're asking it to become:
   bool next = !ledAssumedOn;
   const char* nextStr = next ? "on" : "off";
 
@@ -168,14 +164,14 @@ void sendLightToggle() {
 
   String tx1 = makeTxId("led");
   postEvent("desk_led", "TOGGLE",
-            nextStr,              // <-- send the *new* state
+            nextStr, 
             nullptr,
             tx1.c_str(), "main-ttgo", millis());
 
-  if (err == ESP_OK) ledAssumedOn = next;  // optimistic update
+  if (err == ESP_OK) ledAssumedOn = next;
 }
 
-// ===== Debouncer (with ctor) =====
+//  debouncer
 struct DebouncedButton {
   uint8_t  pin;
   bool     stable;
