@@ -1,0 +1,246 @@
+<!-- const firebaseConfig = {
+        apiKey: "AIzaSyA6pSKnDKLiLyjswp7H_bq8HtCUVMkDXq0",
+        authDomain: "room-state-cloud.firebaseapp.com",
+        projectId: "room-state-cloud",
+        storageBucket: "room-state-cloud.firebasestorage.app",
+        messagingSenderId: "105575025704",
+        appId: "1:105575025704:web:b02832c6f4bb991503b91d",
+        measurementId: "G-KVMW02JT3R",
+      }; -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Room State Changes (last 7 days)</title>
+    <style>
+      body {
+        font-family: system-ui, Arial, sans-serif;
+        max-width: 980px;
+        margin: 32px auto;
+        padding: 0 16px;
+      }
+      h1 {
+        margin-bottom: 8px;
+      }
+      #err {
+        color: #b00;
+        margin: 8px 0 16px;
+      }
+      .wrap {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 28px;
+      }
+      @media (min-width: 900px) {
+        .wrap {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      canvas {
+        background: #fff;
+        border: 1px solid #eee;
+        border-radius: 12px;
+        padding: 12px;
+      }
+    </style>
+
+    <!-- Include Chart.js BEFORE our module script -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+      import {
+        getFirestore,
+        collection,
+        query,
+        where,
+        orderBy,
+        onSnapshot,
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+      import {
+        getAuth,
+        signInAnonymously,
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyA6pSKnDKLiLyjswp7H_bq8HtCUVMkDXq0",
+        authDomain: "room-state-cloud.firebaseapp.com",
+        projectId: "room-state-cloud",
+        storageBucket: "room-state-cloud.firebasestorage.app",
+        messagingSenderId: "105575025704",
+        appId: "1:105575025704:web:b02832c6f4bb991503b91d",
+        measurementId: "G-KVMW02JT3R",
+      };
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const auth = getAuth(app);
+
+      // (If your rules are public-read, you can remove this)
+      try {
+        await signInAnonymously(auth);
+      } catch (e) {
+        document.getElementById("err").textContent = "Auth error: " + e.message;
+      }
+
+      // Chart factory (fixed 24h axis)
+      function makeChart(canvasId, yLabelMap) {
+        return new Chart(document.getElementById(canvasId), {
+          type: "line",
+          data: { datasets: [] },
+          options: {
+            parsing: false,
+            animation: false,
+            spanGaps: true,
+            elements: { point: { radius: 0 } },
+            plugins: { legend: { display: true } },
+            scales: {
+              x: {
+                type: "linear",
+                min: 0,
+                max: 1440,
+                ticks: {
+                  stepSize: 120,
+                  callback: (v) =>
+                    `${String(Math.floor(v / 60)).padStart(2, "0")}:${String(
+                      Math.floor(v % 60)
+                    ).padStart(2, "0")}`,
+                },
+                title: { display: true, text: "Time of day (24h)" },
+              },
+              y: {
+                min: -0.1,
+                max: 1.1,
+                ticks: { stepSize: 1, callback: (v) => yLabelMap[v] ?? v },
+              },
+            },
+          },
+        });
+      }
+
+      const LED_COLOR = "rgba(33,150,243,1)"; // blue
+      const BLINDS_COLOR = "rgba(255,152,0,1)"; // orange
+      const DAYS = 7; // show last N days
+
+      // Map event → binary state; prefer confirmed_state → requested_state → action
+      function toState(e, prev) {
+        const s = (e.confirmed_state || e.requested_state || "").toLowerCase();
+        if (s === "on" || s === "open") return 1;
+        if (s === "off" || s === "closed") return 0;
+        const a = (e.action || "").toUpperCase();
+        if (a === "ON" || a === "OPEN" || a === "AUTO_ON") return 1;
+        if (a === "OFF" || a === "CLOSE" || a === "AUTO_OFF") return 0;
+        if (a === "TOGGLE") return prev === 1 ? 0 : 1;
+        return prev;
+      }
+
+      const minutes = (d) =>
+        d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+      const sod = (d) => {
+        const x = new Date(d);
+        x.setHours(0, 0, 0, 0);
+        return x;
+      };
+      const eod = (d) => {
+        const x = new Date(d);
+        x.setHours(23, 59, 59, 999);
+        return x;
+      };
+      const tag = (d) => d.toISOString().slice(0, 10);
+
+      const ledChart = makeChart("c_led", { 0: "Off", 1: "On" });
+      const blindsChart = makeChart("c_blinds", { 0: "Closed", 1: "Open" });
+
+      const today = sod(new Date());
+      const earliest = new Date(today.getTime() - (DAYS + 1) * 86400000); // N+1 days for seeding
+
+      const q = query(
+        collection(db, "events"),
+        where("ts", ">=", earliest),
+        orderBy("ts", "asc")
+      );
+
+      onSnapshot(
+        q,
+        (snap) => {
+          const all = [];
+          snap.forEach((d) => {
+            const e = d.data();
+            const t = e.ts?.toDate?.()
+              ? e.ts.toDate()
+              : typeof e.client_ts === "number"
+              ? new Date(e.client_ts)
+              : null;
+            if (t) all.push({ t, ...e });
+          });
+          all.sort((a, b) => a.t - b.t);
+
+          function build(device, baseColor, labelBase) {
+            const ds = [];
+            for (let d = 0; d < DAYS; d++) {
+              const dayStart = new Date(today.getTime() - d * 86400000);
+              const dayEnd = eod(dayStart);
+              const dayTag = tag(dayStart);
+              const alpha = d === 0 ? 1.0 : 0.35;
+
+              // prior state before day
+              let state = 0;
+              for (let i = all.length - 1; i >= 0; i--) {
+                const e = all[i];
+                if (e.device !== device) continue;
+                if (e.t < dayStart) {
+                  state = toState(e, state);
+                  break;
+                }
+              }
+
+              // build stepped series 0..1440
+              const evs = all.filter(
+                (e) => e.device === device && e.t >= dayStart && e.t <= dayEnd
+              );
+              const line = [{ x: 0, y: state }];
+              for (const e of evs) {
+                state = toState(e, state);
+                line.push({ x: minutes(e.t), y: state });
+              }
+              line.push({ x: 1440, y: state });
+
+              const color = baseColor.replace(",1)", `,${alpha})`);
+              ds.push({
+                label: `${labelBase} ${dayTag}`,
+                data: line,
+                stepped: true,
+                borderColor: color,
+                backgroundColor: color,
+                borderWidth: d === 0 ? 2 : 1,
+                fill: false,
+                tension: 0,
+              });
+            }
+            return ds;
+          }
+
+          ledChart.data.datasets = build("desk_led", LED_COLOR, "LED");
+          blindsChart.data.datasets = build("blinds", BLINDS_COLOR, "Blinds");
+          ledChart.update();
+          blindsChart.update();
+          document.getElementById("err").textContent = "";
+        },
+        (err) => {
+          document.getElementById("err").textContent =
+            "Firestore error: " + err.message;
+        }
+      );
+    </script>
+  </head>
+  <body>
+    <h1>Room State Changes (last 7 days)</h1>
+    <div id="err" style="color: #b00; margin: 8px 0"></div>
+    <h2>LED (On/Off)</h2>
+    <canvas id="c_led" height="100"></canvas>
+    <h2 style="margin-top: 28px">Blinds (Open/Closed)</h2>
+    <canvas id="c_blinds" height="100"></canvas>
+  </body>
+</html>
