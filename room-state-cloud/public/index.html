@@ -35,8 +35,7 @@
         padding: 12px;
       }
     </style>
-
-    <!-- Include Chart.js BEFORE our module script -->
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
 
@@ -67,8 +66,7 @@
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
       const auth = getAuth(app);
-
-      // (If your rules are public-read, you can remove this)
+      
       try {
         await signInAnonymously(auth);
       } catch (e) {
@@ -184,8 +182,7 @@
                   break;
                 }
               }
-
-              // build stepped series 0..1440
+              
               const evs = all.filter(
                 (e) => e.device === device && e.t >= dayStart && e.t <= dayEnd
               );
